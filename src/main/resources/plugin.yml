@@ -1,0 +1,7 @@
+name: MobChecker
+version: ${version}
+main: net.eleias.mobchecker.MobChecker
+api-version: 1.17
+commands:
+  mobchecker:
+    description: "モブチェッカーコマンド"

@@ -1,0 +1,17 @@
+ignore-worlds: []
+spawn-limit-by-mobs-per-world:
+  enable: true
+  mobs-upper-limit: 50
+  check-exceeded-interval-tick: 20
+spawn-limit-by-tps:
+  enable: true
+  tps-criterion: 17.5
+  check-below-interval-tick: 1200
+  check-recovery-interval-tick: 1200
+  invalid-check-tick-after-restart: 6000
+  repeat-counter-limit: 3
+  repeat-counter-reset-minute: 60
+announce-messages:
+  spawn-temp-stop: 異常な負荷を検出したためmobの湧きを一時停止します。
+  spawn-perm-stop: 慢性的な過負荷状態を検知したためモブの湧きを全域で停止しました。管理者に連絡ください。
+  spawn-resume: 負荷状態の解消を確認したためmobの湧きを再開します。

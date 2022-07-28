@@ -1,0 +1,50 @@
+plugins {
+    id 'com.github.johnrengelman.shadow' version '7.0.0'
+    id 'java'
+}
+
+//==============================
+// 基本情報
+//==============================
+group 'net.eleias'
+version '1.0.0'
+
+// FILE_NAME は書き換えなくてOK
+final String FILE_NAME = 'MobChecker-v' + version
+
+//==============================
+// プロジェクト設定
+//==============================
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(16)
+}
+
+repositories {
+    mavenCentral()
+    maven { url = uri "https://papermc.io/repo/repository/maven-public/" }
+    mavenLocal()
+}
+
+dependencies {
+    compileOnly 'io.papermc.paper:paper-api:1.17-R0.1-SNAPSHOT'
+}
+
+//==============================
+// 通常ビルド
+//==============================
+shadowJar {
+    archiveFileName = FILE_NAME + '.jar'
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding('UTF-8')
+}
+
+processResources {
+    Map<String, String> props = [version: project.version.toString()]
+    inputs.properties props
+    filteringCharset('UTF-8')
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}

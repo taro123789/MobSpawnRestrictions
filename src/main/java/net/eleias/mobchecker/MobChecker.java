@@ -12,6 +12,7 @@ import java.util.stream.Stream;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.GameRule;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -46,6 +47,8 @@ public final class MobChecker extends JavaPlugin {
     private BukkitTask _tpsCheckTask = null;
     private LocalDateTime _latestStopByTPSsTime;
     private int _stopByTPSsCounter;
+
+    private BukkitTask _gameruleCheckTask;
 
     private List<RegisteredCommand> _registeredCommands = List.of(
         new RegisteredCommand("/mobchecker help [page]", 
@@ -104,6 +107,21 @@ public final class MobChecker extends JavaPlugin {
         ),
         new RegisteredCommand("/mobchecker set announce-messages spawn-resume [value]",
             Component.text("TPS回復によるMOB湧き制限が解除された時のメッセージを表示・設定します。")
+        ),
+        new RegisteredCommand("/mobchecker set gamerule-checker do-mob-spawning enable [value]", 
+            Component.text("ゲームルールチェック (doMobSpawning) の有効状態を表示・設定します。")
+        ),
+        new RegisteredCommand("/mobchecker set gamerule-checker do-mob-spawning interval-tick [value]", 
+            Component.text("ゲームルールチェック (doMobSpawning) の実行間隔 (Tick) を表示・設定します。")
+        ),
+        new RegisteredCommand("/mobchecker set gamerule-checker do-mob-spawning target-worlds", 
+            Component.text("ゲームルールチェック (doMobSpawning) の対象ワールドを表示します。")
+        ),
+        new RegisteredCommand("/mobchecker set gamerule-checker do-mob-spawning target-worlds [add <worldname>]", 
+            Component.text("ゲームルールチェック (doMobSpawning) の対象ワールドを追加します。")
+        ),
+        new RegisteredCommand("/mobchecker set gamerule-checker do-mob-spawning target-worlds [remove <worldname>]", 
+            Component.text("ゲームルールチェック (doMobSpawning) の対象ワールドから削除します。")
         ),
         new RegisteredCommand("/mobchecker ignore-worlds add <worldname>", 
             Component.text("指定したワールドを監視除外対象に追加します。")
@@ -204,17 +222,18 @@ public final class MobChecker extends JavaPlugin {
                 // （reload ではないため、既存のワールドの監視対象フラグは書き換えない）
                 checkNewLoadWorld();
 
-                if (args.length < 3 || 4 < args.length) break;
+                if (args.length < 3) break;
                 if (args[1].equals("world")) {
                     switch (args[2]) {
-                        case Config.SpawnLimitByMobsPerWorld.PATH_ENABLE:
+                        case Config.SpawnLimitByMobsPerWorld.PATH_ENABLE -> { 
                             // set world enable [value]
                             if (args.length == 3) {
                                 log(sender, Component.text(MessageFormat.format(
                                     "ワールドごとのMOB数上限は {0} に設定されています。",
                                     _config.spawnLimitByMobsPerWorld().enable()
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 var value = args[3].toLowerCase();
                                 if (value.equals("true") || value.equals("false")) {
                                     _config.spawnLimitByMobsPerWorld().enable(Boolean.parseBoolean(value));
@@ -226,17 +245,18 @@ public final class MobChecker extends JavaPlugin {
                                 } else {
                                     log(sender, Component.text("[value] には true または false を指定してください。", TextColor.color(255, 0, 0)));
                                 }
+                                return true;
                             }
-                            return true;
-
-                        case Config.SpawnLimitByMobsPerWorld.PATH_MOBS_UPPER_LIMIT:
+                        }
+                        case Config.SpawnLimitByMobsPerWorld.PATH_MOBS_UPPER_LIMIT -> {
                             // set world mobs-upper-limit [value]
                             if (args.length == 3) {
                                 log(sender, Component.text(MessageFormat.format(
                                     "ワールドごとのMOB数上限の上限値は {0} に設定されています。",
                                     _config.spawnLimitByMobsPerWorld().mobsUpperLimit()
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 try {
                                     var value = Integer.parseInt(args[3]);
                                     if (value < 0) {
@@ -251,10 +271,10 @@ public final class MobChecker extends JavaPlugin {
                                 } catch (NumberFormatException e) {
                                     log(sender, Component.text("[value] には 0 以上の数字を指定してください。", TextColor.color(255, 0, 0)));
                                 }
+                                return true;
                             }
-                            return true;
-                        
-                        case Config.SpawnLimitByMobsPerWorld.PATH_CHECK_EXCEEDED_INTERVAL_TICK:
+                        }
+                        case Config.SpawnLimitByMobsPerWorld.PATH_CHECK_EXCEEDED_INTERVAL_TICK -> {
                             // set world check-exceeded-interval-tick [value]
                             if (args.length == 3) {
                                 log(sender, Component.text(MessageFormat.format(
@@ -262,7 +282,8 @@ public final class MobChecker extends JavaPlugin {
                                     _config.spawnLimitByMobsPerWorld().checkExceededIntervalTick(),
                                     convertTickToTimeString(_config.spawnLimitByMobsPerWorld().checkExceededIntervalTick())
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 try {
                                     var i = switch (args[3].charAt(args[3].length() - 1)) {
                                         case 's' -> Integer.parseInt(args[3].substring(0, args[3].length() - 1)) * 20;
@@ -283,8 +304,9 @@ public final class MobChecker extends JavaPlugin {
                                 } catch (NumberFormatException e) {
                                     log(sender, Component.text("[value] には 1 以上の整数（＋時間単位）を指定してください。", TextColor.color(255, 0, 0)));
                                 }
+                                return true;
                             }
-                            return true;  
+                        }
                     }
                 } else if (args[1].equals("tps")) {
                     switch (args[2]) {
@@ -295,7 +317,8 @@ public final class MobChecker extends JavaPlugin {
                                     "TPSチェックは {0} に設定されています。",
                                     _config.spawnLimitByTPS().enable()
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 var value = args[3].toLowerCase();
                                 if (value.equals("true") || value.equals("false")) {
                                     _config.spawnLimitByTPS().enable(Boolean.parseBoolean(value));
@@ -307,10 +330,9 @@ public final class MobChecker extends JavaPlugin {
                                 } else {
                                     log(sender, Component.text("[value] には true または false を指定してください。", TextColor.color(255, 0, 0)));
                                 }
+                                return true;
                             }
-                            return true;
                         }
-                        
                         case Config.SpawnLimitByTPS.PATH_TPS_CRITERION -> {
                             // set tps tps-criterion [value]
                             if (args.length == 3) {
@@ -318,7 +340,8 @@ public final class MobChecker extends JavaPlugin {
                                     "TPSチェックの基準値は {0} に設定されています。",
                                     _config.spawnLimitByTPS().tpsCriterion()
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 try {
                                     var value = Double.parseDouble(args[3]);
                                     if (value < 0.1) {
@@ -333,10 +356,9 @@ public final class MobChecker extends JavaPlugin {
                                 } catch (NumberFormatException e) {
                                     log(sender, Component.text("[value] には 0.1 以上の小数を指定してください。", TextColor.color(255, 0, 0)));
                                 }
+                                return true;
                             }
-                            return true;
                         }
-                        
                         case Config.SpawnLimitByTPS.PATH_CHECK_BELOW_INTERVAL_TICK -> {
                             // set tps check-below-interval [value]
                             if (args.length == 3) {
@@ -345,7 +367,8 @@ public final class MobChecker extends JavaPlugin {
                                     _config.spawnLimitByTPS().checkBelowIntervalTick(),
                                     convertTickToTimeString(_config.spawnLimitByTPS().checkBelowIntervalTick())
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 try {
                                     var i = switch (args[3].charAt(args[3].length() - 1)) {
                                         case 's' -> Integer.parseInt(args[3].substring(0, args[3].length() - 1)) * 20;
@@ -378,6 +401,7 @@ public final class MobChecker extends JavaPlugin {
                                     _config.spawnLimitByTPS().checkRecoveryIntervalTick(),
                                     convertTickToTimeString(_config.spawnLimitByTPS().checkRecoveryIntervalTick())
                                 )));
+                                return true;
                             } else {
                                 try {
                                     var i = switch (args[3].charAt(args[3].length() - 1)) {
@@ -399,10 +423,9 @@ public final class MobChecker extends JavaPlugin {
                                 } catch (NumberFormatException e) {
                                     log(sender, Component.text("[value] には 1 以上の整数（＋時間単位）を指定してください。", TextColor.color(255, 0, 0)));
                                 }
+                                return true;
                             }
-                            return true;
                         }
-                        
                         case Config.SpawnLimitByTPS.PATH_INVALID_CHECK_TICK_AFTER_RESTART -> {
                             // set tps invalid-check-after-restart [value]
                             if (args.length == 3) {
@@ -411,7 +434,8 @@ public final class MobChecker extends JavaPlugin {
                                     _config.spawnLimitByTPS().invalidCheckTickAfterRestart(),
                                     convertTickToTimeString(_config.spawnLimitByTPS().invalidCheckTickAfterRestart())
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 try {
                                     var i = switch (args[3].charAt(args[3].length() - 1)) {
                                         case 's' -> Integer.parseInt(args[3].substring(0, args[3].length() - 1)) * 20;
@@ -432,8 +456,8 @@ public final class MobChecker extends JavaPlugin {
                                 } catch (NumberFormatException e) {
                                     log(sender, Component.text("[value] には 1 以上の整数（＋時間単位）を指定してください。", TextColor.color(255, 0, 0)));
                                 }
+                                return true;
                             }
-                            return true;
                         }
                         
                         case Config.SpawnLimitByTPS.PATH_REPEAT_COUNTER_LIMIT -> {
@@ -443,7 +467,8 @@ public final class MobChecker extends JavaPlugin {
                                     "TPSが基準値を下回ったらカウントされるカウンターの上限値は {0} に設定されています。",
                                     _config.spawnLimitByTPS().repeatCounterLimit()
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 try {
                                     var value = Integer.parseInt(args[3]);
                                     if (value < 0) {
@@ -458,8 +483,8 @@ public final class MobChecker extends JavaPlugin {
                                 } catch (NumberFormatException e) {
                                     log(sender, Component.text("[value] には 0 以上の整数を指定してください。", TextColor.color(255, 0, 0)));
                                 }
+                                return true;
                             }
-                            return true;
                         }
 
                         case Config.SpawnLimitByTPS.PATH_REPEAT_COUNTER_RESET_MINUTE -> {
@@ -469,6 +494,7 @@ public final class MobChecker extends JavaPlugin {
                                     "TPSが基準値を下回ったらカウントされるカウンターがリセットされる時間は {0}分 に設定されています。",
                                     _config.spawnLimitByTPS().repeatCounterResetMinute()
                                 )));
+                                return true;
                             } else {
                                 try {
                                     var value = Integer.parseInt(args[3]);
@@ -484,8 +510,8 @@ public final class MobChecker extends JavaPlugin {
                                 } catch (NumberFormatException e) {
                                     log(sender, Component.text("[value] には 1 以上の整数を指定してください。", TextColor.color(255, 0, 0)));
                                 }
+                                return true;
                             }
-                            return true;
                         }
                     }
                 } else if (args[1].equals("announce-messages")) {
@@ -497,14 +523,14 @@ public final class MobChecker extends JavaPlugin {
                                     "TPS低下による一時的なMOB湧き制限が行われた時のメッセージ：{0}", 
                                     _config.announceMessages().spawnTempStop()
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 _config.announceMessages().spawnTempStop(args[3]);
                                 _config.save();
                                 log(sender, Component.text("TPS低下による一時的なMOB湧き制限が行われた時のメッセージを更新しました。"));
+                                return true;
                             }
-                            return true;
                         }
-
                         case Config.AnnounceMessages.PATH_SPAWN_PERM_STOP -> {
                             // set announce-messages spawn-perm-stop [value]
                             if (args.length == 3) {
@@ -512,14 +538,14 @@ public final class MobChecker extends JavaPlugin {
                                     "慢性的なTPS低下による恒久的なMOB湧き制限が行われた時のメッセージ：{0}", 
                                     _config.announceMessages().spawnPermStop()
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 _config.announceMessages().spawnPermStop(args[3]);
                                 _config.save();
                                 log(sender, Component.text("慢性的なTPS低下による恒久的なMOB湧き制限が行われた時のメッセージを更新しました。"));
+                                return true;
                             }
-                            return true;
                         }
-
                         case Config.AnnounceMessages.PATH_SPAWN_RESUME -> {
                             // set announce-messages spawn-resume [value]
                             if (args.length == 3) {
@@ -527,12 +553,166 @@ public final class MobChecker extends JavaPlugin {
                                     "TPS回復によるMOB湧き制限が解除された時のメッセージ：{0}", 
                                     _config.announceMessages().spawnResume()
                                 )));
-                            } else {
+                                return true;
+                            } else if (args.length == 4) {
                                 _config.announceMessages().spawnResume(args[3]);
                                 _config.save();
                                 log(sender, Component.text("TPS回復によるMOB湧き制限が解除された時のメッセージを更新しました。"));
+                                return true;
+                            }
+                        }
+                    }
+                } else if (args[1].equals("gamerule-checker") && args[2].equals(Config.GameruleChecker.PATH_DO_MOB_SPAWNING)) {
+                    if (args.length < 4 || 6 < args.length) break;
+                    switch (args[3]) {
+                        case Config.GameruleChecker.DoMobSpawning.PATH_ENABLE -> {
+                            // set gamerule-checker do-mob-spawning enable [value]
+                            if (args.length == 4) {
+                                log(sender, Component.text(MessageFormat.format(
+                                    "ゲームルールチェック (doMobSpawning) は {0} に設定されています。", 
+                                    _config.gamemodeChecker().doMobSpawning().enable()
+                                )));
+                            } else {
+                                var value = args[4].toLowerCase();
+                                if (value.equals("true") || value.equals("false")) {
+                                    _config.gamemodeChecker().doMobSpawning().enable(Boolean.parseBoolean(value));
+                                    _config.save();
+                                    log(sender, Component.text(MessageFormat.format(
+                                        "ゲームルールチェック (doMobSpawning) を {0} に設定しました。",
+                                        value
+                                    )));
+                                } else {
+                                    log(sender, Component.text("[value] には true または false を指定してください。", TextColor.color(255, 0, 0)));
+                                }
                             }
                             return true;
+                        }
+                        case Config.GameruleChecker.DoMobSpawning.PATH_VALUE -> {
+                            // set gamerule-checker do-mob-spawning value [value]
+                            if (args.length == 4) {
+                                log(sender, Component.text(MessageFormat.format(
+                                    "ゲームルールチェックの doMobSpawning の設定値は {0} です。", 
+                                    _config.gamemodeChecker().doMobSpawning().value()
+                                )));
+                            } else {
+                                var value = args[4].toLowerCase();
+                                if (value.equals("true") || value.equals("false")) {
+                                    _config.gamemodeChecker().doMobSpawning().value(Boolean.parseBoolean(value));
+                                    _config.save();
+                                    log(sender, Component.text(MessageFormat.format(
+                                        "ゲームルールチェックの doMobSpawning の設定値を {0} に変更しました。",
+                                        value
+                                    )));
+                                } else {
+                                    log(sender, Component.text("[value] には true または false を指定してください。", TextColor.color(255, 0, 0)));
+                                }
+                            }
+                            return true;
+                        }
+                        case Config.GameruleChecker.DoMobSpawning.PATH_CHECK_INTERVAL_TICK -> {
+                            // set gamerule-checker do-mob-spawning interval-tick [value]
+                            if (args.length == 4) {
+                                log(sender, Component.text(MessageFormat.format(
+                                    "ゲームルールチェック (doMobSpawning) は {0}Tick ({1}) ごとに実行されています。", 
+                                    _config.gamemodeChecker().doMobSpawning().checkIntervalTick(),
+                                    convertTickToTimeString(_config.gamemodeChecker().doMobSpawning().checkIntervalTick())
+                                )));
+                            } else {
+                                try {
+                                    var i = switch (args[4].charAt(args[4].length() - 1)) {
+                                        case 's' -> Integer.parseInt(args[4].substring(0, args[4].length() - 1)) * 20;
+                                        case 'm' -> Integer.parseInt(args[4].substring(0, args[4].length() - 1)) * 20 * 60;
+                                        case 'h' -> Integer.parseInt(args[4].substring(0, args[4].length() - 1)) * 20 * 3600;
+                                        case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> Integer.parseInt(args[4]);
+                                        default -> throw new NumberFormatException();
+                                    };
+                                    if (i < 1) {
+                                        throw new NumberFormatException();
+                                    }
+                                    _config.gamemodeChecker().doMobSpawning().checkIntervalTick(i);
+                                    _config.save();
+                                    log(sender, Component.text(MessageFormat.format(
+                                        "ゲームルールチェック (doMobSpawning) の実行間隔を {0}Tick ({1}) に設定しました。",
+                                        i, convertTickToTimeString(i)
+                                    )));
+                                } catch (NumberFormatException e) {
+                                    log(sender, Component.text("[value] には 1 以上の整数（＋時間単位）を指定してください。", TextColor.color(255, 0, 0)));
+                                }
+                            }
+                            return true;
+                        }
+                        case Config.GameruleChecker.DoMobSpawning.PATH_TARGET_WORLDS -> {
+                            // set gamerule-checker do-mob-spawning target-worlds [<add/remove> <worldname>]
+                            if (args.length == 4) {
+                                log(sender, false, Component.text(" "));
+                                log(sender, false, Component.text("-------ゲームルールチェック (doMobSpawning) 対象ワールド---------"));
+                                log(sender, false, Component.text("緑：チェック対象", getTextColor(ChatColor.GREEN)));
+                                log(sender, false, Component.text("黄：追加未反映（/mobchecker reload 実行後に反映）", getTextColor(ChatColor.YELLOW)));
+                                log(sender, false, Component.text("赤：削除未反映（/mobchecker reload 実行後に反映）", getTextColor(ChatColor.RED)));
+                                log(sender, false, Component.text("灰：チェック対象に追加されているがワールドが見つからない", getTextColor(ChatColor.GRAY)));
+                                log(sender, false, Component.text(" "));
+                                var targetWorlds = _config.gamemodeChecker().doMobSpawning().targetWorlds();
+                                targetWorlds.forEach((s) -> {
+                                    var monitoringWorld = _monitoringWorlds.get(s);
+                                    
+                                    TextColor textColor;
+                                    if (monitoringWorld != null) {
+                                        if (monitoringWorld.isGameRuleCheckTarget(GameRule.DO_MOB_SPAWNING)) {
+                                            textColor = getTextColor(ChatColor.GREEN);
+                                        } else {
+                                            textColor = getTextColor(ChatColor.YELLOW);
+                                        }
+                                    } else {
+                                        textColor = getTextColor(ChatColor.GRAY);
+                                    }
+                        
+                                    log(sender, false, Component.text(s, textColor));
+                                });
+                                _monitoringWorlds.values().stream().filter((e) -> e.isIgnored() && !targetWorlds.contains(e.getWorld().getName())).forEach((e) -> {
+                                    log(sender, false, Component.text(e.getWorld().getName(), getTextColor(ChatColor.RED)));
+                                });
+                                log(sender, false, Component.text("------------------------------------------------"));
+                                log(sender, false, Component.text(" "));
+                                return true;
+                            } else if (args.length == 6) {
+                                if (args[4].equals("add")) {
+                                    var targetWorlds = _config.gamemodeChecker().doMobSpawning().targetWorlds();
+                                    if (targetWorlds.contains(args[5])) {
+                                        log(sender, Component.text(MessageFormat.format(
+                                            "すでにワールド {0} はチェック対象に追加されています。",
+                                            args[5]
+                                        ), TextColor.color(255, 255, 0)));
+                                    } else {
+                                        targetWorlds.add(args[5]);
+                                        _config.gamemodeChecker().doMobSpawning().targetWorlds(targetWorlds);
+                                        _config.save();
+                                        log(sender, Component.text(MessageFormat.format(
+                                            "ワールド {0} をチェック対象に追加しました。", 
+                                            args[5]
+                                        )));
+                                    }
+                                } else if (args[4].equals("remove")) {
+                                    var targetWorlds = _config.gamemodeChecker().doMobSpawning().targetWorlds();
+                                    if (targetWorlds.contains(args[5])) {
+                                        targetWorlds.remove(args[5]);
+                                        _config.gamemodeChecker().doMobSpawning().targetWorlds(targetWorlds);
+                                        _config.save();
+                                        log(sender, Component.text(MessageFormat.format(
+                                            "ワールド {0} をチェック対象から削除しました。",
+                                            args[5]
+                                        )));
+                                    } else {
+                                        log(sender, Component.text(MessageFormat.format(
+                                            "ワールド {0} がチェック対象の中に見つかりませんでした。", 
+                                            args[5]
+                                        ), TextColor.color(255, 255, 0)));
+                                    }
+                                } else {
+                                    log(sender, Component.text("引数5には add または remove を指定してください。", TextColor.color(255, 0, 0)));
+                                }
+                                return true;
+                            }
+                            break;
                         }
                     }
                 }
@@ -540,7 +720,35 @@ public final class MobChecker extends JavaPlugin {
             
             case "ignore-worlds":
                 if (args.length == 1) {
-                    showIgnoreWorldNames(sender);
+                    log(sender, false, Component.text(" "));
+                    log(sender, false, Component.text("-------監視除外対象に追加されているワールド---------"));
+                    log(sender, false, Component.text("緑：監視除外中", getTextColor(ChatColor.GREEN)));
+                    log(sender, false, Component.text("黄：追加未反映（/mobchecker reload 実行後に反映）", getTextColor(ChatColor.YELLOW)));
+                    log(sender, false, Component.text("赤：削除未反映（/mobchecker reload 実行後に反映）", getTextColor(ChatColor.RED)));
+                    log(sender, false, Component.text("灰：監視除外対象に追加されているがワールドが見つからない", getTextColor(ChatColor.GRAY)));
+                    log(sender, false, Component.text(" "));
+                    var ignoreWorlds = _config.ignoreWorlds();
+                    ignoreWorlds.forEach((s) -> {
+                        var monitoringWorld = _monitoringWorlds.get(s);
+                        
+                        TextColor textColor;
+                        if (monitoringWorld != null) {
+                            if (monitoringWorld.isIgnored()) {
+                                textColor = getTextColor(ChatColor.GREEN);
+                            } else {
+                                textColor = getTextColor(ChatColor.YELLOW);
+                            }
+                        } else {
+                            textColor = getTextColor(ChatColor.GRAY);
+                        }
+
+                        log(sender, false, Component.text(s, textColor));
+                    });
+                    _monitoringWorlds.values().stream().filter((e) -> e.isIgnored() && !ignoreWorlds.contains(e.getWorld().getName())).forEach((e) -> {
+                        log(sender, false, Component.text(e.getWorld().getName(), getTextColor(ChatColor.RED)));
+                    });
+                    log(sender, false, Component.text("------------------------------------------------"));
+                    log(sender, false, Component.text(" "));
                     return true;
                 } else if (args.length == 3) {
                     if (args[1].equals("add")) {
@@ -607,14 +815,39 @@ public final class MobChecker extends JavaPlugin {
             }
             case "set" -> {
                 yield switch (args.length) {
-                    case 2 -> Stream.of("world", "tps", "announce-messages").filter((s) -> s.startsWith(args[1])).toList();
+                    case 2 -> Stream.of("world", "tps", "announce-messages", "gamerule-checker").filter((s) -> s.startsWith(args[1])).toList();
                     case 3 -> switch (args[1]) {
                         case "world" -> _config.spawnLimitByMobsPerWorld().getKeys().stream().filter((s) -> s.startsWith(args[2])).toList();
                         case "tps" -> _config.spawnLimitByTPS().getKeys().stream().filter((s) -> s.startsWith(args[2])).toList();
                         case "announce-messages" -> _config.announceMessages().getKeys().stream().filter((s) -> s.startsWith(args[2])).toList();
+                        case "gamerule-checker" -> _config.gamemodeChecker().getKeys().stream().filter((s) -> s.startsWith(args[2])).toList();
                         default -> null;
                     };
-                    case 4 -> List.of("[value]");
+                    case 4 -> switch (args[1]) {
+                        case "gamerule-checker" -> switch (args[2]) {
+                            case "do-mob-spawning" -> _config.gamemodeChecker().doMobSpawning().getKeys().stream().filter((s) -> s.startsWith(args[3])).toList();
+                            default -> null;
+                        };
+                        default -> List.of("[value]");
+                    };
+                    case 5 -> {
+                        if (
+                            args[1].equals("gamerule-checker") && args[2].equals("do-mob-spawning") && args[3].equals("target-worlds")
+                        ) {
+                            yield List.of("add", "remove").stream().filter((s) -> s.startsWith(args[4])).toList();
+                        } else {
+                            yield List.of("[value]");
+                        }
+                    }
+                    case 6 -> {
+                        if (
+                            args[1].equals("gamerule-checker") && args[2].equals("do-mob-spawning") && args[3].equals("target-worlds")
+                        ) {
+                            yield List.of("<worldname>");
+                        } else {
+                            yield null;
+                        }
+                    }
                     default -> null;
                 };
             }
@@ -637,6 +870,17 @@ public final class MobChecker extends JavaPlugin {
         // 初期化処理
         _latestStopByTPSsTime = null;
         _stopByTPSsCounter = 0;
+
+        // 現在読み込まれているワールドの監視対象フラグなどを再設定
+        _monitoringWorlds.clear();
+        Bukkit.getWorlds().forEach((e) -> {
+            _monitoringWorlds.put(e.getName(), new MonitoringWorld(
+                e, 
+                _config.ignoreWorlds().contains(e.getName()),
+                _config.gamemodeChecker().doMobSpawning().targetWorlds().contains(e.getName())
+            ));
+        });
+
         runMobCountCheckTask(
             _config.spawnLimitByMobsPerWorld().enable(),
             _config.spawnLimitByMobsPerWorld().mobsUpperLimit(),
@@ -654,18 +898,22 @@ public final class MobChecker extends JavaPlugin {
             _config.announceMessages().spawnPermStop(),
             _config.announceMessages().spawnResume()
         );
-
-        // 現在読み込まれているワールドの監視対象フラグなどを再設定
-        _monitoringWorlds.clear();
-        Bukkit.getWorlds().forEach((e) -> {
-            _monitoringWorlds.put(e.getName(), new MonitoringWorld(e, _config.ignoreWorlds().contains(e.getName())));
-        });
+        runGameRuleCheckTask(
+            GameRule.DO_MOB_SPAWNING, 
+            _config.gamemodeChecker().doMobSpawning().enable(), 
+            _config.gamemodeChecker().doMobSpawning().value(), 
+            _config.gamemodeChecker().doMobSpawning().checkIntervalTick()
+        );
     }
 
     private void checkNewLoadWorld() {
         // 登録されていない（おそらく追加された）ワールドを新しく一覧に追加し、監視対象フラグなどを設定
         Bukkit.getWorlds().stream().filter((e) -> !_monitoringWorlds.containsKey(e.getName())).forEach((e) -> {
-            _monitoringWorlds.put(e.getName(), new MonitoringWorld(e, _config.ignoreWorlds().contains(e.getName())));
+            _monitoringWorlds.put(e.getName(), new MonitoringWorld(
+                e, 
+                _config.ignoreWorlds().contains(e.getName()),
+                _config.gamemodeChecker().doMobSpawning().targetWorlds().contains(e.getName())
+            ));
         });
     }
 
@@ -737,7 +985,7 @@ public final class MobChecker extends JavaPlugin {
     /**
      * 一定時間ごとに各ワールドのMOB数をチェックし、一定数以上であればMOBを減らすタスクを実行します。
      */
-    private @NotNull void runMobCountCheckTask(boolean enable, int mobsUpperLimit, int checkExceededIntervalTick) {
+    private void runMobCountCheckTask(boolean enable, int mobsUpperLimit, int checkExceededIntervalTick) {
         // 既に実行されているタスクがあればキャンセル
         if (_mobCountCheckTask != null) {
             _mobCountCheckTask.cancel();
@@ -906,6 +1154,29 @@ public final class MobChecker extends JavaPlugin {
         );
     }
 
+    private <T> void runGameRuleCheckTask(GameRule<T> rule, boolean enable, boolean value, int checkIntervalTick) {
+        // 既に実行されているタスクがあればキャンセル
+        if (_gameruleCheckTask != null) {
+            _gameruleCheckTask.cancel();
+        }
+
+        // 無効化されていれば実行しない
+        if (!enable) return;
+
+        _gameruleCheckTask = Bukkit.getScheduler().runTaskTimer(
+            this, 
+            () -> {
+                for (var e : _monitoringWorlds.values()) {
+                    if (e.isGameRuleCheckTarget(GameRule.DO_MOB_SPAWNING)) {
+                        e.getWorld().setGameRule(GameRule.DO_MOB_SPAWNING, value);
+                    }
+                }
+            },
+            0L,
+            checkIntervalTick
+        );
+    }
+
     //==============================
     // コマンド
     //==============================
@@ -1014,38 +1285,6 @@ public final class MobChecker extends JavaPlugin {
             worldEntitiesInfo.friendlyMobCount(), 
             worldEntitiesInfo.monsterMobCount()
         )));
-        log(sender, false, Component.text("------------------------------------------------"));
-        log(sender, false, Component.text(" "));
-    }
-
-    private void showIgnoreWorldNames(CommandSender sender) {
-        log(sender, false, Component.text(" "));
-        log(sender, false, Component.text("-------監視除外対象に追加されているワールド---------"));
-        log(sender, false, Component.text("緑：監視除外中", getTextColor(ChatColor.GREEN)));
-        log(sender, false, Component.text("黄：追加未反映（/mobchecker reload 実行後に反映）", getTextColor(ChatColor.YELLOW)));
-        log(sender, false, Component.text("赤：削除未反映（/mobchecker reload 実行後に反映）", getTextColor(ChatColor.RED)));
-        log(sender, false, Component.text("灰：監視除外対象に追加されているがワールドが見つからない", getTextColor(ChatColor.GRAY)));
-        log(sender, false, Component.text(" "));
-        var ignoreWorlds = _config.ignoreWorlds();
-        ignoreWorlds.forEach((s) -> {
-            var monitoringWorld = _monitoringWorlds.get(s);
-            
-            TextColor textColor;
-            if (monitoringWorld != null) {
-                if (monitoringWorld.isIgnored()) {
-                    textColor = getTextColor(ChatColor.GREEN);
-                } else {
-                    textColor = getTextColor(ChatColor.YELLOW);
-                }
-            } else {
-                textColor = getTextColor(ChatColor.GRAY);
-            }
-
-            log(sender, false, Component.text(s, textColor));
-        });
-        _monitoringWorlds.values().stream().filter((e) -> e.isIgnored() && !ignoreWorlds.contains(e.getWorld().getName())).forEach((e) -> {
-            log(sender, false, Component.text(e.getWorld().getName(), getTextColor(ChatColor.RED)));
-        });
         log(sender, false, Component.text("------------------------------------------------"));
         log(sender, false, Component.text(" "));
     }

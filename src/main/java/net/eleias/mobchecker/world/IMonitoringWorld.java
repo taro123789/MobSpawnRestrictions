@@ -1,5 +1,6 @@
 package net.eleias.mobchecker.world;
 
+import org.bukkit.GameRule;
 import org.bukkit.World;
 
 public interface IMonitoringWorld {
@@ -10,4 +11,5 @@ public interface IMonitoringWorld {
     void startMobSpawning();
     void stopMobSpawning();
     boolean isIgnored();
+    <T> boolean isGameRuleCheckTarget(GameRule<T> gameRule);
 }

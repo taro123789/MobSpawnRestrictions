@@ -15,3 +15,9 @@ announce-messages:
   spawn-temp-stop: 異常な負荷を検出したためmobの湧きを一時停止します。
   spawn-perm-stop: 慢性的な過負荷状態を検知したためモブの湧きを全域で停止しました。管理者に連絡ください。
   spawn-resume: 負荷状態の解消を確認したためmobの湧きを再開します。
+gamemode-checker:
+  do-mob-spawning:
+    enable: true
+    value: false
+    check-interval-tick: 1200
+    target-worlds: []

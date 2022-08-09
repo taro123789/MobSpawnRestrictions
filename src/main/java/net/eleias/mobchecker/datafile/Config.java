@@ -18,6 +18,7 @@ public class Config {
     private SpawnLimitByMobsPerWorld _spawnLimitByMobsPerWorld;
     private SpawnLimitByTPS _spawnLimitByTPS;
     private AnnounceMessages _announceMessages;
+    private GameruleChecker _gamemodeChecker;
 
     public Config(Supplier<FileConfiguration> loadSupplier, Runnable saveRunnable) {
         _loadSupplier = loadSupplier;
@@ -30,6 +31,7 @@ public class Config {
         _spawnLimitByMobsPerWorld = new SpawnLimitByMobsPerWorld();
         _spawnLimitByTPS = new SpawnLimitByTPS();
         _announceMessages = new AnnounceMessages();
+        _gamemodeChecker = new GameruleChecker();
     }
 
     public void save() {
@@ -44,22 +46,26 @@ public class Config {
         _fc.set(PATH_IGNORE_WORLDS, list);
     }
 
-    public AnnounceMessages announceMessages() {
-        return _announceMessages;
-    }
-
-    private void setIfNotContains(ConfigurationSection cs, String path) {
-        if (!cs.getKeys(false).contains(path)) {
-            cs.set(path, cs.get(path));
-        }
-    }
-
     public SpawnLimitByMobsPerWorld spawnLimitByMobsPerWorld() {
         return _spawnLimitByMobsPerWorld;
     }
 
     public SpawnLimitByTPS spawnLimitByTPS() {
         return _spawnLimitByTPS;
+    }
+
+    public AnnounceMessages announceMessages() {
+        return _announceMessages;
+    }
+
+    public GameruleChecker gamemodeChecker() {
+        return _gamemodeChecker;
+    }
+
+    private void setIfNotContains(ConfigurationSection cs, String path) {
+        if (!cs.getKeys(false).contains(path)) {
+            cs.set(path, cs.get(path));
+        }
     }
 
     public class SpawnLimitByMobsPerWorld {
@@ -225,6 +231,78 @@ public class Config {
 
         public Set<String> getKeys() {
             return _cs.getKeys(false);
+        }
+    }
+
+    public class GameruleChecker {
+        public static final String PATH_DO_MOB_SPAWNING = "do-mob-spawning";
+
+        private ConfigurationSection _cs = _fc.getConfigurationSection("gamemode-checker");
+
+        private DoMobSpawning _doMobSpawning;
+
+        private GameruleChecker() {
+            _doMobSpawning = new DoMobSpawning();
+        }
+
+        public DoMobSpawning doMobSpawning() {
+            return _doMobSpawning;
+        }
+
+        public Set<String> getKeys() {
+            return _cs.getKeys(false);
+        }
+
+        public class DoMobSpawning {
+            public static final String PATH_ENABLE = "enable";
+            public static final String PATH_VALUE = "value";
+            public static final String PATH_CHECK_INTERVAL_TICK = "check-interval-tick";
+            public static final String PATH_TARGET_WORLDS = "target-worlds";
+
+            private ConfigurationSection _cs = GameruleChecker.this._cs.getConfigurationSection("do-mob-spawning");
+
+            private DoMobSpawning() {
+                setIfNotContains(_cs, PATH_ENABLE);
+                setIfNotContains(_cs, PATH_VALUE);
+                setIfNotContains(_cs, PATH_CHECK_INTERVAL_TICK);
+                setIfNotContains(_cs, PATH_TARGET_WORLDS);
+            }
+
+            public boolean enable() {
+                return _cs.getBoolean(PATH_ENABLE);
+            }
+
+            public void enable(boolean value) {
+                _cs.set(PATH_ENABLE, value);
+            }
+
+            public boolean value() {
+                return _cs.getBoolean(PATH_VALUE);
+            }
+
+            public void value(boolean value) {
+                _cs.set(PATH_VALUE, value);
+            }
+
+            public int checkIntervalTick() {
+                return _cs.getInt(PATH_CHECK_INTERVAL_TICK);
+            }
+
+            public void checkIntervalTick(int value) {
+                _cs.set(PATH_CHECK_INTERVAL_TICK, value);
+            }
+
+            public List<String> targetWorlds() {
+                return _cs.getStringList(PATH_TARGET_WORLDS);
+            }
+
+            public void targetWorlds(List<String> list) {
+                _cs.set(PATH_TARGET_WORLDS, list);
+            }
+
+            public Set<String> getKeys() {
+                return _cs.getKeys(false);
+            }
         }
     }
 }

@@ -6,12 +6,15 @@ import org.bukkit.entity.Mob;
 
 public class MonitoringWorld implements IMonitoringWorld {
     private World _world;
-
     private boolean _isIgnored;
+    
+    private boolean _isDoMobSpawningCheckTarget;
 
-    public MonitoringWorld(World world, boolean isIgnored) {
+    public MonitoringWorld(World world, boolean isIgnored, boolean isDoMobSpawningCheckTarget) {
         _world = world;
         _isIgnored = isIgnored;
+
+        _isDoMobSpawningCheckTarget = isDoMobSpawningCheckTarget;
     }
 
     @Override
@@ -51,5 +54,13 @@ public class MonitoringWorld implements IMonitoringWorld {
     @Override
     public boolean isIgnored() {
         return _isIgnored;
+    }
+
+    @Override
+    public <T> boolean isGameRuleCheckTarget(GameRule<T> gameRule) {
+        if (gameRule == GameRule.DO_MOB_SPAWNING) {
+            return _isDoMobSpawningCheckTarget;
+        }
+        return false;
     }
 }
